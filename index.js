@@ -113,8 +113,8 @@ app.get('/qr-image', async (req, res) => {
     }
 });
 
-// Start HTTP server
-const PORT = process.env.PORT || 3000;
+// ========== FIXED PORT FOR RAILWAY ==========
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`🌐 QR Viewer: http://localhost:${PORT}`);
     console.log(`📱 Open your Railway URL in browser to see QR code\n`);
@@ -134,6 +134,8 @@ function showQR(qrData) {
         if (!err) {
             latestQR = url;
             console.log("\n✅ QR code ready! Open your Railway URL in browser.\n");
+        } else {
+            console.log("❌ Error generating QR for web:", err);
         }
     });
 }
@@ -237,6 +239,7 @@ async function connectToWhatsApp() {
 
     sock.ev.on("creds.update", saveCreds);
     setupMessageHandler();
+    setupAntiDelete();
 }
 
 // ========== MESSAGE HANDLER ==========
