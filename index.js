@@ -193,8 +193,8 @@ async function connectToWhatsApp() {
         const files = fs.readdirSync(authPath);
         if (files.length < 5) {
             console.log("⚠️ Found incomplete auth folder. Deleting...");
-            await fs.remove(authPath);
-            await fs.ensureDir(authPath);
+            //await fs.remove(authPath);
+            //await fs.ensureDir(authPath);
         }
     }
 
