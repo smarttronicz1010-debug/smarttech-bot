@@ -14,7 +14,7 @@ let sock;
 let botStartTime = Date.now();
 let isConnected = false;
 
-// ========== HTTP SERVER FOR QR CODE (RAILWAY FIX) ==========
+// ========== HTTP SERVER ==========
 app.get('/', (req, res) => {
     if (latestQR) {
         res.send(`
@@ -51,8 +51,6 @@ app.get('/', (req, res) => {
                     .steps li { color: #00ff41; margin: 10px 0; margin-left: 20px; }
                     .status { color: #00ff41; font-weight: bold; margin-top: 20px; }
                     footer { margin-top: 20px; color: #00ff41; font-size: 0.8rem; opacity: 0.7; }
-                    .loader { border: 4px solid #00ff41; border-top: 4px solid #ff00ff; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 20px auto; }
-                    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
                 </style>
             </head>
             <body>
@@ -113,7 +111,7 @@ app.get('/qr-image', async (req, res) => {
     }
 });
 
-// ========== FIXED PORT FOR RAILWAY ==========
+// Start HTTP server
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`🌐 QR Viewer: http://localhost:${PORT}`);
@@ -134,8 +132,6 @@ function showQR(qrData) {
         if (!err) {
             latestQR = url;
             console.log("\n✅ QR code ready! Open your Railway URL in browser.\n");
-        } else {
-            console.log("❌ Error generating QR for web:", err);
         }
     });
 }
@@ -191,6 +187,17 @@ function getMainMenu(sender) {
 async function connectToWhatsApp() {
     console.log("📱 Initializing WhatsApp connection...");
 
+    // Delete corrupted auth folder if it exists but is incomplete
+    const authPath = "./auth_info";
+    if (fs.existsSync(authPath)) {
+        const files = fs.readdirSync(authPath);
+        if (files.length < 5) {
+            console.log("⚠️ Found incomplete auth folder. Deleting...");
+            await fs.remove(authPath);
+            await fs.ensureDir(authPath);
+        }
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState("auth_info");
 
     sock = makeWASocket({
@@ -223,7 +230,6 @@ async function connectToWhatsApp() {
             console.log(`║     👑 Author: ${config.author}                                           ║`);
             console.log(`║     🧬 Version: ${config.version}                                         ║`);
             console.log(`║     🛡️ Anti-Ban: ACTIVE                                                   ║`);
-            console.log(`║     📩 Anti-Delete DM: SENDING TO OWNER                                   ║`);
             console.log(`║     ⚡ Total Commands: 120+                                               ║`);
             console.log("╚════════════════════════════════════════════════════════════════════╝\n");
 
@@ -231,15 +237,16 @@ async function connectToWhatsApp() {
 
             try {
                 await sock.sendMessage(config.ownerNumber, {
-                    text: `✅ *${config.botName} is ONLINE!*\n⏱️ Time: ${new Date().toLocaleString()}\n🛡️ Anti-Delete: ACTIVE\n👑 Welcome back, Master!`,
+                    text: `✅ *${config.botName} is ONLINE!*\n⏱️ Time: ${new Date().toLocaleString()}\n👑 Welcome back, Master!`,
                 });
             } catch (e) {}
+            
+            // Setup message handler only AFTER connection is open
+            setupMessageHandler();
         }
     });
 
     sock.ev.on("creds.update", saveCreds);
-    setupMessageHandler();
-    setupAntiDelete();
 }
 
 // ========== MESSAGE HANDLER ==========
@@ -257,79 +264,55 @@ function setupMessageHandler() {
         const command = args.shift().toLowerCase();
         const isOwner = sender === config.ownerNumber;
 
-        // ========== MENU ==========
+        // MENU
         if (command === "menu") {
             if (!args[0]) {
                 const menuData = getMainMenu(sender);
                 await sock.sendMessage(sender, menuData);
                 return;
             } else if (args[0] === "1") {
-                await sock.sendMessage(sender, { text: `📦 *DOWNLOAD SYSTEM*\n━━━━━━━━━━━━━━━━━━━━\n🎵 .play <song/url>\n🎬 .video <url>\n📱 .facebook <url>\n📸 .ig <url>\n🎵 .tt <url>\n📌 .pinterest <url>\n🔍 .yts <song>\n🔗 .tourl\n📦 .mediafire <url>` });
+                await sock.sendMessage(sender, { text: `📦 *DOWNLOAD SYSTEM*\n━━━━━━━━━━━━━━━━━━━━\n🎵 .play <song>\n🎬 .video <url>\n📱 .facebook <url>\n📸 .ig <url>\n🎵 .tt <url>\n🔗 .tourl` });
                 return;
             } else if (args[0] === "2") {
                 await sock.sendMessage(sender, { text: `🧠 *AI ENGINE*\n━━━━━━━━━━━━━━━━━━━━\n🤖 .ai <question>\n💬 .gpt <prompt>\n🎨 .image <desc>\n🎵 .lyrics <song>\n💡 .fact` });
                 return;
             } else if (args[0] === "3") {
-                await sock.sendMessage(sender, { text: `👥 *GROUP CONTROL*\n━━━━━━━━━━━━━━━━━━━━\n📢 .tagall\n🤫 .hidetag <msg>\n👢 .kick @user\n➕ .add <number>\n👑 .promote @user\n⬇️ .demote @user\n🔗 .grouplink\n🔒 .close\n🔓 .open\n📝 .setname <name>\n📊 .ginfo\n⚠️ .warn @user\n📊 .poll` });
+                await sock.sendMessage(sender, { text: `👥 *GROUP CONTROL*\n━━━━━━━━━━━━━━━━━━━━\n📢 .tagall\n👢 .kick @user\n👑 .promote @user\n⬇️ .demote @user\n🔗 .grouplink\n🔒 .close\n🔓 .open` });
                 return;
             } else if (args[0] === "4") {
-                await sock.sendMessage(sender, { text: `🛡️ *SECURITY*\n━━━━━━━━━━━━━━━━━━━━\n🛡️ .guard <on/off>\n🔗 .antilink <on/off>\n👁️ .antidelete <on/off>\n📞 .anticall <on/off>\n⚙️ .setting\n\n📩 Anti-Delete ALWAYS sends DMs to owner!` });
+                await sock.sendMessage(sender, { text: `🛡️ *SECURITY*\n━━━━━━━━━━━━━━━━━━━━\n🛡️ .guard <on/off>\n🔗 .antilink <on/off>\n👁️ .antidelete <on/off>\n⚙️ .setting` });
                 return;
             } else if (args[0] === "5") {
                 if (!isOwner) return sock.sendMessage(sender, { text: "❌ Owner only" });
-                await sock.sendMessage(sender, { text: `👑 *OWNER ACCESS*\n━━━━━━━━━━━━━━━━━━━━\n👑 .owner\n🖼️ .fullpp\n👤 .getpp @user\n\n💡 .getpp @919876543210` });
+                await sock.sendMessage(sender, { text: `👑 *OWNER ACCESS*\n━━━━━━━━━━━━━━━━━━━━\n👑 .owner\n🖼️ .fullpp\n👤 .getpp @user` });
                 return;
             } else if (args[0] === "6") {
-                await sock.sendMessage(sender, { text: `⚡ *BOT CORE*\n━━━━━━━━━━━━━━━━━━━━\n✅ .alive\n🏓 .ping\n⚡ .speed\n🔧 .mode <public/private>\n⚙️ .prefix <symbol>\n👁️ .autoread <on/off>\n🤖 .chatbot <on/off>\n👤 .presence <status>\n🌍 .timezone <zone>\n📦 .repo\n🔄 .connect` });
+                await sock.sendMessage(sender, { text: `⚡ *BOT CORE*\n━━━━━━━━━━━━━━━━━━━━\n✅ .alive\n🏓 .ping\n⚡ .speed\n⚙️ .prefix <symbol>\n👁️ .autoread <on/off>\n🤖 .chatbot <on/off>` });
                 return;
             } else if (args[0] === "7") {
-                await sock.sendMessage(sender, { text: `🛠 *UTILITY TOOLS*\n━━━━━━━━━━━━━━━━━━━━\n🎨 .sticker\n🌤️ .weather <city>\n😂 .joke\n✨ .fancy <text>\n🌐 .translate <text>\n🐙 .github <username>\n🔐 .pair <number>\n👁️ .vv\n🆔 .jid\n🆘 .support\n🖼️ .img <query>\n💾 .save <key> <value>\n🗑️ .del <key>` });
+                await sock.sendMessage(sender, { text: `🛠 *UTILITY TOOLS*\n━━━━━━━━━━━━━━━━━━━━\n🎨 .sticker\n🌤️ .weather <city>\n😂 .joke\n✨ .fancy <text>\n🌐 .translate <text>\n🐙 .github <username>\n🔐 .pair <number>\n👁️ .vv\n🆔 .jid` });
                 return;
             }
         }
 
-        // ========== BASIC ==========
+        // BASIC
         else if (command === "alive") {
-            await sock.sendMessage(sender, { text: `✅ *${config.botName} is ALIVE!*\n⏱️ Uptime: ${getUptime()}\n👑 Author: ${config.author}\n🛡️ Anti-Ban: ACTIVE\n⚡ Commands: 120+` });
+            await sock.sendMessage(sender, { text: `✅ *${config.botName} is ALIVE!*\n⏱️ Uptime: ${getUptime()}\n👑 Author: ${config.author}` });
         }
-
         else if (command === "ping") {
             const start = Date.now();
             await sock.sendMessage(sender, { text: "🏓 Pinging..." });
             const end = Date.now();
             await sock.sendMessage(sender, { text: `🏓 Pong! ${end - start}ms` });
         }
-
-        else if (command === "speed") {
-            await sock.sendMessage(sender, { text: `⚡ *Speed Test*\n⏱️ Response: FAST\n💾 Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB\n🛡️ Anti-Ban: ACTIVE` });
-        }
-
-        // ========== FUN ==========
         else if (command === "joke") {
-            const jokes = [
-                "Why do programmers prefer dark mode? Because light attracts bugs! 🐛",
-                "Why was the JavaScript developer sad? Because he didn't Node how to Express himself! 😢",
-                "What do you call a fake noodle? An impasta! 🍝",
-            ];
-            await sock.sendMessage(sender, { text: `😂 *Joke:* ${jokes[Math.floor(Math.random() * jokes.length)]}` });
+            const jokes = ["Why do programmers prefer dark mode? Light attracts bugs! 🐛", "Why was the JS developer sad? He didn't Node how to Express himself! 😢"];
+            await sock.sendMessage(sender, { text: `😂 ${jokes[Math.floor(Math.random() * jokes.length)]}` });
         }
-
-        else if (command === "fact") {
-            const facts = [
-                "Honey never spoils. Archaeologists found 3000-year-old honey!",
-                "Octopuses have three hearts and blue blood.",
-                "Bananas are berries, but strawberries aren't.",
-            ];
-            await sock.sendMessage(sender, { text: `💡 *Fact:* ${facts[Math.floor(Math.random() * facts.length)]}` });
-        }
-
-        // ========== WEATHER ==========
         else if (command === "weather") {
-            if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .weather <city>\nExample: .weather London" });
-            await sock.sendMessage(sender, { text: `🌤️ *Weather in ${args.join(" ")}*\n🌡️ 25°C ☀️ Sunny\n💧 Humidity: 60%` });
+            if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .weather <city>" });
+            await sock.sendMessage(sender, { text: `🌤️ *Weather in ${args.join(" ")}*\n🌡️ 25°C ☀️ Sunny` });
         }
-
-        // ========== STICKER ==========
         else if (command === "sticker") {
             const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
             if (!quotedMsg?.imageMessage) {
@@ -339,117 +322,36 @@ function setupMessageHandler() {
             await sock.sendMessage(sender, { sticker: buffer });
             return;
         }
-
-        // ========== VIEW ONCE (.vv) ==========
         else if (command === "vv") {
             const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-            if (!quotedMsg) {
-                return sock.sendMessage(sender, { text: "❌ Reply to a view once image/video with .vv" });
+            if (!quotedMsg?.imageMessage?.viewOnce) {
+                return sock.sendMessage(sender, { text: "❌ Reply to a view once image with .vv" });
             }
-            if (quotedMsg.imageMessage && quotedMsg.imageMessage.viewOnce) {
-                await sock.sendMessage(sender, { text: "📸 Converting view once image..." });
-                const buffer = await downloadMediaMessage(quotedMsg, "buffer", {});
-                await sock.sendMessage(sender, { image: buffer, caption: "📸 View Once Converted" });
-                return;
-            }
-            if (quotedMsg.videoMessage && quotedMsg.videoMessage.viewOnce) {
-                await sock.sendMessage(sender, { text: "🎥 Converting view once video..." });
-                const buffer = await downloadMediaMessage(quotedMsg, "buffer", {});
-                await sock.sendMessage(sender, { video: buffer, caption: "🎥 View Once Converted" });
-                return;
-            }
-            await sock.sendMessage(sender, { text: "❌ No view once message found" });
+            const buffer = await downloadMediaMessage(quotedMsg, "buffer", {});
+            await sock.sendMessage(sender, { image: buffer, caption: "📸 View Once Converted" });
+            return;
         }
-
-        // ========== GET PROFILE PICTURE (.getpp) ==========
         else if (command === "getpp") {
             let target = sender;
             if (args[0]) {
                 let input = args[0].replace("@", "");
-                if (/^\d+$/.test(input)) {
-                    target = input + "@s.whatsapp.net";
-                } else if (input.includes("@")) {
-                    target = input;
-                } else {
-                    target = input + "@s.whatsapp.net";
-                }
+                target = input.includes("@") ? input : input + "@s.whatsapp.net";
             }
             try {
                 const pp = await sock.profilePictureUrl(target, "image");
-                await sock.sendMessage(sender, { image: { url: pp }, caption: `👤 Profile: ${target.split("@")[0]}` });
-            } catch {
-                await sock.sendMessage(sender, { text: `❌ No profile picture found for "${args[0] || "yourself"}"` });
-            }
-        }
-
-        // ========== FULL PP (OWNER ONLY) ==========
-        else if (command === "fullpp" && isOwner) {
-            try {
-                const pp = await sock.profilePictureUrl(sender, "image");
-                await sock.sendMessage(sender, { image: { url: pp }, caption: "🖼️ Full Quality DP" });
+                await sock.sendMessage(sender, { image: { url: pp }, caption: `👤 ${target.split("@")[0]}` });
             } catch {
                 await sock.sendMessage(sender, { text: "❌ No profile picture found" });
             }
         }
-
-        // ========== OWNER INFO ==========
-        else if (command === "owner" && isOwner) {
-            await sock.sendMessage(sender, { text: `👑 *Owner*\n📛 ${config.author}\n🤖 ${config.botName}\n📱 ${config.ownerNumber.split("@")[0]}` });
-        }
-
-        // ========== PAIR CODE ==========
         else if (command === "pair") {
-            if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .pair <number>\nExample: .pair 919876543210" });
+            if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .pair <number>" });
             const code = Math.floor(100000 + Math.random() * 900000);
-            await sock.sendMessage(sender, { text: `🔐 *Pairing Code:* ${code}\n\n📱 WhatsApp → Settings → Linked Devices → Link with phone number\n🔑 Enter: ${code}` });
+            await sock.sendMessage(sender, { text: `🔐 *Pairing Code:* ${code}\n\nEnter in WhatsApp → Linked Devices → Link with phone number` });
         }
-
-        // ========== FANCY TEXT ==========
-        else if (command === "fancy") {
-            if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .fancy <text>" });
-            await sock.sendMessage(sender, { text: `✨ *Fancy:* ${args.join(" ").toUpperCase().split("").join(" ")}` });
-        }
-
-        // ========== TRANSLATE ==========
-        else if (command === "translate") {
-            if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .translate <text>" });
-            try {
-                const response = await axios.get(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(args.join(" "))}&langpair=auto|en`);
-                await sock.sendMessage(sender, { text: `🌐 *Translation:* ${response.data.responseData.translatedText}` });
-            } catch {
-                await sock.sendMessage(sender, { text: `🌐 *Translation:* ${args.join(" ")}` });
-            }
-        }
-
-        // ========== GITHUB ==========
-        else if (command === "github") {
-            if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .github <username>" });
-            try {
-                const response = await axios.get(`https://api.github.com/users/${args[0]}`);
-                await sock.sendMessage(sender, { text: `🐙 *GitHub: ${response.data.login}*\n📦 Repos: ${response.data.public_repos}\n👥 Followers: ${response.data.followers}` });
-            } catch {
-                await sock.sendMessage(sender, { text: "❌ User not found" });
-            }
-        }
-
-        // ========== JID ==========
         else if (command === "jid") {
-            await sock.sendMessage(sender, { text: `🆔 *Your JID:* ${sender}` });
+            await sock.sendMessage(sender, { text: `🆔 ${sender}` });
         }
-
-        // ========== SUPPORT ==========
-        else if (command === "support") {
-            await sock.sendMessage(sender, { text: `🆘 *Support*\n👑 ${config.author}\n📱 ${config.ownerNumber.split("@")[0]}\n🤖 ${config.botName}` });
-        }
-
-        // ========== IMAGE SEARCH ==========
-        else if (command === "img") {
-            if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .img <query>" });
-            const imageUrl = `https://source.unsplash.com/featured/?${encodeURIComponent(args.join(" "))}`;
-            await sock.sendMessage(sender, { image: { url: imageUrl }, caption: `🖼️ ${args.join(" ")}` });
-        }
-
-        // ========== GROUP COMMANDS ==========
         else if (command === "tagall") {
             const chatId = sender;
             if (!chatId.endsWith("@g.us")) return sock.sendMessage(sender, { text: "❌ Groups only" });
@@ -459,59 +361,12 @@ function setupMessageHandler() {
             mentions.forEach(m => { message += `@${m.split("@")[0]}\n`; });
             await sock.sendMessage(chatId, { text: message, mentions });
         }
-
         else if (command === "grouplink") {
             const chatId = sender;
             if (!chatId.endsWith("@g.us")) return sock.sendMessage(sender, { text: "❌ Groups only" });
             const code = await sock.groupInviteCode(chatId);
             await sock.sendMessage(sender, { text: `🔗 https://chat.whatsapp.com/${code}` });
         }
-
-        else if (command === "kick") {
-            const chatId = sender;
-            if (!chatId.endsWith("@g.us")) return sock.sendMessage(sender, { text: "❌ Groups only" });
-            if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .kick @user" });
-            let target = args[0].replace("@", "");
-            if (!target.includes("@")) target = target + "@s.whatsapp.net";
-            await sock.groupParticipantsUpdate(chatId, [target], "remove");
-            await sock.sendMessage(sender, { text: `👢 Kicked @${target.split("@")[0]}`, mentions: [target] });
-        }
-
-        else if (command === "promote") {
-            const chatId = sender;
-            if (!chatId.endsWith("@g.us")) return sock.sendMessage(sender, { text: "❌ Groups only" });
-            if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .promote @user" });
-            let target = args[0].replace("@", "");
-            if (!target.includes("@")) target = target + "@s.whatsapp.net";
-            await sock.groupParticipantsUpdate(chatId, [target], "promote");
-            await sock.sendMessage(sender, { text: `👑 Promoted @${target.split("@")[0]}`, mentions: [target] });
-        }
-
-        else if (command === "demote") {
-            const chatId = sender;
-            if (!chatId.endsWith("@g.us")) return sock.sendMessage(sender, { text: "❌ Groups only" });
-            if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .demote @user" });
-            let target = args[0].replace("@", "");
-            if (!target.includes("@")) target = target + "@s.whatsapp.net";
-            await sock.groupParticipantsUpdate(chatId, [target], "demote");
-            await sock.sendMessage(sender, { text: `⬇️ Demoted @${target.split("@")[0]}`, mentions: [target] });
-        }
-
-        else if (command === "close") {
-            const chatId = sender;
-            if (!chatId.endsWith("@g.us")) return sock.sendMessage(sender, { text: "❌ Groups only" });
-            await sock.groupSettingUpdate(chatId, "announcement");
-            await sock.sendMessage(sender, { text: "🔒 Group closed. Only admins can send." });
-        }
-
-        else if (command === "open") {
-            const chatId = sender;
-            if (!chatId.endsWith("@g.us")) return sock.sendMessage(sender, { text: "❌ Groups only" });
-            await sock.groupSettingUpdate(chatId, "not_announcement");
-            await sock.sendMessage(sender, { text: "🔓 Group opened. All members can send." });
-        }
-
-        // ========== ANTI-DELETE (OWNER ONLY) ==========
         else if (command === "antidelete" && isOwner) {
             if (!args[0]) return sock.sendMessage(sender, { text: "❌ Usage: .antidelete on/off" });
             const isOn = args[0].toLowerCase() === "on";
@@ -523,80 +378,8 @@ function setupMessageHandler() {
             fs.writeJsonSync("./database/security.json", security);
             await sock.sendMessage(sender, { text: `👁️ Anti-Delete: ${isOn ? "ON" : "OFF"}\n📩 Owner DM: ALWAYS ACTIVE` });
         }
-
-        else if (command === "setting") {
-            let security = {};
-            if (fs.existsSync("./database/security.json")) {
-                security = fs.readJsonSync("./database/security.json");
-            }
-            await sock.sendMessage(sender, { text: `🛡️ *Security*\n👁️ Anti-Delete: ${security.antidelete ? "ON" : "OFF"}\n📩 Owner DM: ALWAYS ON` });
-        }
-
-        // ========== PREFIX CHANGE (OWNER ONLY) ==========
-        else if (command === "prefix" && isOwner) {
-            if (!args[0]) return sock.sendMessage(sender, { text: `❌ Current prefix: ${config.prefix}` });
-            config.prefix = args[0];
-            await sock.sendMessage(sender, { text: `⚡ Prefix changed to: ${config.prefix}` });
-        }
-
-        else if (command === "repo") {
-            await sock.sendMessage(sender, { text: `📦 *Repository*\n🔗 https://github.com/smarttronicz1010-debug/smarttech-bot` });
-        }
-
-        // ========== DEFAULT ==========
         else {
-            await sock.sendMessage(sender, { text: `❌ Unknown command: ${command}\n\n📱 Type .menu to see all available commands.\n💡 Total Commands: 120+` });
-        }
-    });
-}
-
-// ========== ANTI-DELETE LISTENER ==========
-async function setupAntiDelete() {
-    sock.ev.on('messages.update', async (updates) => {
-        for (const update of updates) {
-            if (update.update?.messageStubParameters?.[0] === 'MESSAGE_DELETE') {
-                const deletedMsgId = update.update.messageStubParameters[1];
-                const chatId = update.key.remoteJid;
-                const deletedBy = update.key.participant || update.key.remoteJid;
-                const isGroup = chatId.endsWith('@g.us');
-                
-                try {
-                    const messages = await sock.loadMessages(chatId, 50);
-                    const deletedMsg = messages.find(m => m.key.id === deletedMsgId);
-                    
-                    let deletedContent = '[Could not recover content]';
-                    if (deletedMsg) {
-                        if (deletedMsg.message?.conversation) {
-                            deletedContent = deletedMsg.message.conversation;
-                        } else if (deletedMsg.message?.extendedTextMessage?.text) {
-                            deletedContent = deletedMsg.message.extendedTextMessage.text;
-                        } else if (deletedMsg.message?.imageMessage) {
-                            deletedContent = '📸 Image';
-                        } else if (deletedMsg.message?.videoMessage) {
-                            deletedContent = '🎥 Video';
-                        } else {
-                            deletedContent = '[Media]';
-                        }
-                    }
-                    
-                    const groupInfo = isGroup ? `👥 Group: ${chatId.split('@')[0]}` : `💬 Private: ${chatId.split('@')[0]}`;
-                    const dmMessage = `⚠️ *MESSAGE DELETED* ⚠️\n\n${groupInfo}\n👤 By: @${deletedBy.split('@')[0]}\n📝 Content: ${deletedContent}\n⏱️ Time: ${new Date().toLocaleString()}`;
-                    
-                    await sock.sendMessage(config.ownerNumber, { text: dmMessage });
-                    
-                    let security = {};
-                    if (fs.existsSync("./database/security.json")) {
-                        security = fs.readJsonSync("./database/security.json");
-                    }
-                    
-                    if (security.antidelete && isGroup) {
-                        await sock.sendMessage(chatId, { 
-                            text: `⚠️ *MESSAGE DELETED* ⚠️\n\n👤 By: @${deletedBy.split('@')[0]}\n📝 Content: ${deletedContent}`,
-                            mentions: [deletedBy]
-                        });
-                    }
-                } catch (e) {}
-            }
+            await sock.sendMessage(sender, { text: `❌ Unknown command: ${command}\n\nType .menu for help` });
         }
     });
 }
