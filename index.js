@@ -1,14 +1,10 @@
-import makeWASocket,{
-  useMultiFileAuthState,
-  DisconnectReason,
-  downloadMediaMessage,
-} from "@whiskeysockets/baileys";
-import Pino from "pino";
-import fs from "fs-extra";
-import qrcode from "qrcode-terminal";
-import axios from "axios";
-import config from "./config.js";
-
+import pkg from '@whiskeysockets/baileys';
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = pkg;
+import Pino from 'pino';
+import fs from 'fs-extra';
+import qrcode from 'qrcode-terminal';
+import axios from 'axios';
+import config from './config.js';
 let sock;
 let botStartTime = Date.now();
 
