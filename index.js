@@ -1,5 +1,4 @@
-import {
-  default as makeWASocket,
+import makeWASocket,{
   useMultiFileAuthState,
   DisconnectReason,
   downloadMediaMessage,
